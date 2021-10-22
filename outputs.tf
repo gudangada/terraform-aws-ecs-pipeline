@@ -64,11 +64,6 @@ output "codepipeline_arn" {
 }
 
 output "codepipeline_resource" {
-  description = "CodePipeline Full Resource"
-  value       = local.codepipeline_resource
-}
-
-output "codepipeline_resource" {
   description = "CodePipeline resource"
   value       = local.codepipeline_resource
 }
