@@ -278,6 +278,19 @@ resource "aws_codepipeline" "default" {
     }
   }
 
+  # TODO: Implement this with dynamic
+  stage {
+    name = "Approval"
+
+    action {
+      name     = "Approval"
+      category = "Approval"
+      owner    = "AWS"
+      provider = "Manual"
+      version  = "1"
+    }
+  }
+
   stage {
     name = "Build"
 
@@ -294,18 +307,6 @@ resource "aws_codepipeline" "default" {
       configuration = {
         ProjectName = module.codebuild.project_name
       }
-    }
-  }
-  # TODO: Implement this with dynamic
-  stage {
-    name = "Approval"
-
-    action {
-      name     = "Approval"
-      category = "Approval"
-      owner    = "AWS"
-      provider = "Manual"
-      version  = "1"
     }
   }
 
