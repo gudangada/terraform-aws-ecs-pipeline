@@ -251,18 +251,6 @@ variable "traffic_routing_config" {
   DOC
 }
 
-variable "create_default_sns_topic" {
-  type        = bool
-  default     = true
-  description = "Whether to create default SNS topic through which notifications are sent."
-}
-
-variable "sns_topic_arn" {
-  type        = string
-  default     = null
-  description = "The ARN of the SNS topic through which notifications are sent."
-}
-
 variable "alarm_configuration" {
   type = object({
     alarms                    = list(string)
