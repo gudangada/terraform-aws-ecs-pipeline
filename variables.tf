@@ -212,7 +212,7 @@ variable "disable_approval_before_build" {
 }
 
 ### CodeDeploy ###
-variable "use_codedeploy_for_deploy_stage" {
+variable "use_codedeploy_for_deployment" {
   type        = bool
   default     = false
   description = "Boolean to enable codepipeline to use CodeDeploy as deployment provider"

@@ -147,11 +147,16 @@ data "aws_iam_policy_document" "codebuild" {
     sid = ""
 
     actions = [
-      "codebuild:*"
+      "codebuild:*",
+      "ecr:*"
     ]
 
-    resources = [module.codebuild.project_id]
-    effect    = "Allow"
+    resources = [
+      module.codebuild.project_id,
+      format("arn:aws:ecr:%s:%s:repository/%s", local.region, local.aws_account_id, var.image_repo_name)
+    ]
+
+    effect = "Allow"
   }
 }
 
@@ -240,6 +245,39 @@ resource "aws_iam_role_policy_attachment" "codebuild_s3" {
   policy_arn = join("", aws_iam_policy.s3.*.arn)
 }
 
+## CodeDeploy Module ###
+resource "aws_iam_role_policy_attachment" "default" {
+  count      = local.codedeploy_count
+  policy_arn = "arn:aws:iam::aws:policy/AWSCodeDeployRoleForECS"
+  role       = join("", aws_iam_role.default.*.id)
+}
+
+module "codedeploy" {
+  source  = "cloudposse/code-deploy/aws"
+  version = "0.2.3"
+
+  count                              = local.codedeploy_count
+  minimum_healthy_hosts              = var.minimum_healthy_hosts
+  traffic_routing_config             = var.traffic_routing_config
+  alarm_configuration                = var.alarm_configuration
+  auto_rollback_configuration_events = var.auto_rollback_configuration_events
+  blue_green_deployment_config       = var.blue_green_deployment_config
+  deployment_style                   = var.deployment_style
+  load_balancer_info                 = var.load_balancer_info
+  service_role_arn                   = join("", aws_iam_role.default.*.arn)
+
+  ecs_service = [
+    {
+      cluster_name = aws_ecs_cluster.default.name
+      service_name = module.ecs_alb_service_task.service_name
+    }
+  ]
+
+  context = module.this.context
+}
+## CodeDeploy Module ###
+
+
 resource "aws_codepipeline" "default" {
   count    = module.this.enabled && var.github_oauth_token != "" ? 1 : 0
   name     = module.codepipeline_label.id
@@ -278,16 +316,19 @@ resource "aws_codepipeline" "default" {
     }
   }
 
-  # TODO: Implement this with dynamic
-  stage {
-    name = "Approval"
+  dynamic "stage" {
+    for_each = var.disable_approval_before_build == true ? [] : [1]
 
-    action {
-      name     = "Approval"
-      category = "Approval"
-      owner    = "AWS"
-      provider = "Manual"
-      version  = "1"
+    content {
+      name = "Approval"
+
+      action {
+        name     = "Approval"
+        category = "Approval"
+        owner    = "AWS"
+        provider = "Manual"
+        version  = "1"
+      }
     }
   }
 
@@ -420,6 +461,11 @@ resource "random_string" "webhook_secret" {
 }
 
 locals {
+  region         = var.region != "" ? var.region : data.aws_region.default.name
+  aws_account_id = var.aws_account_id != "" ? var.aws_account_id : data.aws_caller_identity.default.account_id
+
+  codedeploy_count = module.this.enabled && var.use_codedeploy_for_deployment ? 1 : 0
+
   webhook_secret = join("", random_string.webhook_secret.*.result)
   webhook_url    = join("", aws_codepipeline_webhook.webhook.*.url)
 }
