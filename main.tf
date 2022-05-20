@@ -246,7 +246,7 @@ resource "aws_iam_role_policy_attachment" "codebuild_s3" {
 }
 
 ## CodeDeploy Module ###
-resource "aws_iam_role_policy_attachment" "default" {
+resource "aws_iam_role_policy_attachment" "codedeploy" {
   count      = local.codedeploy_count
   policy_arn = "arn:aws:iam::aws:policy/AWSCodeDeployRoleForECS"
   role       = join("", aws_iam_role.default.*.id)
@@ -268,8 +268,8 @@ module "codedeploy" {
 
   ecs_service = [
     {
-      cluster_name = aws_ecs_cluster.default.name
-      service_name = module.ecs_alb_service_task.service_name
+      cluster_name = var.ecs_cluster_name
+      service_name = var.service_name
     }
   ]
 
@@ -292,7 +292,8 @@ resource "aws_codepipeline" "default" {
     aws_iam_role_policy_attachment.default,
     aws_iam_role_policy_attachment.s3,
     aws_iam_role_policy_attachment.codebuild,
-    aws_iam_role_policy_attachment.codebuild_s3
+    aws_iam_role_policy_attachment.codebuild_s3,
+    aws_iam_role_policy_attachment.codedeploy
   ]
 
   stage {
@@ -317,8 +318,7 @@ resource "aws_codepipeline" "default" {
   }
 
   dynamic "stage" {
-    for_each = var.disable_approval_before_build == true ? [] : [1]
-
+    for_each = var.disable_approval_before_build ? [] : [1]
     content {
       name = "Approval"
 
@@ -351,20 +351,51 @@ resource "aws_codepipeline" "default" {
     }
   }
 
-  stage {
-    name = "Deploy"
+  dynamic "stage" {
+    for_each = var.use_codedeploy_for_deployment ? [] : [1]
+    content {
+      name = "Deploy"
 
-    action {
-      name            = "Deploy"
-      category        = "Deploy"
-      owner           = "AWS"
-      provider        = "ECS"
-      input_artifacts = ["task"]
-      version         = "1"
+      action {
+        name     = "Deploy"
+        category = "Deploy"
+        owner    = "AWS"
+        provider = "ECS"
+        version  = "1"
 
-      configuration = {
-        ClusterName = var.ecs_cluster_name
-        ServiceName = var.service_name
+        input_artifacts = ["task"]
+
+        configuration = {
+          ClusterName = var.ecs_cluster_name
+          ServiceName = var.service_name
+        }
+      }
+    }
+  }
+
+  dynamic "stage" {
+    for_each = var.use_codedeploy_for_deployment ? [1] : []
+    content {
+      name = "Deploy"
+
+      action {
+        category = "Deploy"
+        owner    = "AWS"
+        provider = "CodeDeployToECS"
+        version  = "1"
+
+        input_artifacts = ["task"]
+
+        configuration = {
+          ApplicationName                = module.codedeploy.name
+          DeploymentGroupName            = module.codedeploy.deployment_config_name
+          Image1ArtifactName             = "task"
+          Image1ContainerName            = "IMAGE1_NAME"
+          AppSpecTemplateArtifact        = "task"
+          AppSpecTemplatePath            = "appspec.yaml"
+          TaskDefinitionTemplateArtifact = "task"
+          TaskDefinitionTemplatePath     = "taskdef.json"
+        }
       }
     }
   }
