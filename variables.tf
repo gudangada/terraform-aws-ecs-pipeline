@@ -299,21 +299,6 @@ variable "deployment_style" {
   DOC
 }
 
-variable "ecs_service" {
-  type = list(object({
-    cluster_name = string
-    service_name = string
-  }))
-  default     = null
-  description = <<-DOC
-    Configuration block(s) of the ECS services for a deployment group.
-    cluster_name:
-      The name of the ECS cluster. 
-    service_name:
-      The name of the ECS service.
-  DOC
-}
-
 variable "load_balancer_info" {
   type        = map(any)
   default     = null
