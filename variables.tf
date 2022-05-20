@@ -211,16 +211,11 @@ variable "disable_approval_before_build" {
   description = "Boolean to enable or disable manual approval before build"
 }
 
+### CodeDeploy ###
 variable "use_codedeploy_for_deploy_stage" {
   type        = bool
   default     = false
   description = "Boolean to enable codepipeline to use CodeDeploy as deployment provider"
-}
-
-variable "compute_platform" {
-  type        = string
-  default     = "ECS"
-  description = "The compute platform can either be `ECS`, `Lambda`, or `Server`"
 }
 
 variable "minimum_healthy_hosts" {
@@ -256,18 +251,6 @@ variable "traffic_routing_config" {
   DOC
 }
 
-variable "create_default_service_role" {
-  type        = bool
-  default     = true
-  description = "Whether to create default IAM role ARN that allows deployments."
-}
-
-variable "service_role_arn" {
-  type        = string
-  default     = null
-  description = "The service IAM role ARN that allows deployments."
-}
-
 variable "create_default_sns_topic" {
   type        = bool
   default     = true
@@ -278,12 +261,6 @@ variable "sns_topic_arn" {
   type        = string
   default     = null
   description = "The ARN of the SNS topic through which notifications are sent."
-}
-
-variable "autoscaling_groups" {
-  type        = list(string)
-  description = "A list of Autoscaling Groups associated with the deployment group."
-  default     = []
 }
 
 variable "alarm_configuration" {
@@ -334,44 +311,6 @@ variable "deployment_style" {
   DOC
 }
 
-variable "ec2_tag_filter" {
-  type = set(object({
-    key   = string
-    type  = string
-    value = string
-  }))
-  default     = []
-  description = <<-DOC
-    The Amazon EC2 tags on which to filter. The deployment group includes EC2 instances with any of the specified tags.
-    Cannot be used in the same call as ec2TagSet.
-  DOC
-}
-
-variable "ec2_tag_set" {
-  type = set(object(
-    {
-      ec2_tag_filter = set(object(
-        {
-          key   = string
-          type  = string
-          value = string
-        }
-      ))
-    }
-  ))
-  default     = []
-  description = <<-DOC
-    A list of sets of tag filters. If multiple tag groups are specified,
-    any instance that matches to at least one tag filter of every tag group is selected.
-    key:
-      The key of the tag filter.
-    type:
-      The type of the tag filter, either `KEY_ONLY`, `VALUE_ONLY`, or `KEY_AND_VALUE`.
-    value:
-      The value of the tag filter.
-  DOC
-}
-
 variable "ecs_service" {
   type = list(object({
     cluster_name = string
@@ -395,16 +334,4 @@ variable "load_balancer_info" {
     see https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/codedeploy_deployment_group#load_balancer_info
   DOC
 }
-
-variable "trigger_events" {
-  type        = list(string)
-  default     = ["DeploymentFailure"]
-  description = <<-DOC
-    The event type or types for which notifications are triggered. 
-    Some values that are supported: 
-      `DeploymentStart`, `DeploymentSuccess`, `DeploymentFailure`, `DeploymentStop`, 
-      `DeploymentRollback`, `InstanceStart`, `InstanceSuccess`, `InstanceFailure`. 
-    See the CodeDeploy documentation for all possible values.
-    http://docs.aws.amazon.com/codedeploy/latest/userguide/monitoring-sns-event-notifications-create-trigger.html 
-  DOC
-}
+### CodeDeploy ###
