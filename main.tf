@@ -147,13 +147,11 @@ data "aws_iam_policy_document" "codebuild" {
     sid = ""
 
     actions = [
-      "codebuild:*",
-      "ecr:*"
+      "codebuild:*"
     ]
 
     resources = [
-      module.codebuild.project_id,
-      format("arn:aws:ecr:%s:%s:repository/%s", local.region, local.aws_account_id, var.image_repo_name)
+      module.codebuild.project_id
     ]
 
     effect = "Allow"
@@ -246,10 +244,58 @@ resource "aws_iam_role_policy_attachment" "codebuild_s3" {
 }
 
 ## CodeDeploy Module ###
+data "aws_iam_policy_document" "codedeploy" {
+  statement {
+    sid = ""
+
+    actions = [
+      "codedeploy:CreateDeployment",
+      "codedeploy:GetDeployment",
+      "codedeploy:GetApplication",
+      "codedeploy:GetApplicationRevision",
+      "codedeploy:RegisterApplicationRevision",
+      "codedeploy:GetDeploymentConfig",
+      "ecs:RegisterTaskDefinition"
+    ]
+
+    resources = [
+      "arn:aws:codedeploy:${local.region}:${local.aws_account_id}:deploymentgroup:${local.codedeploy_app_name}/${local.codedeploy_config_name}",
+      "arn:aws:codedeploy:${local.region}:${local.aws_account_id}:application:${local.codedeploy_app_name}",
+      "arn:aws:codedeploy:${local.region}:${local.aws_account_id}:deploymentconfig:${local.codedeploy_config_name}"
+    ]
+
+    effect = "Allow"
+  }
+}
+
+module "codedeploy_label" {
+  source     = "cloudposse/label/null"
+  version    = "0.24.1"
+  attributes = ["codedeploy"]
+
+  context = module.this.context
+}
+
+resource "aws_iam_policy" "codedeploy" {
+  count  = local.codedeploy_count
+  name   = module.codedeploy_label.id
+  policy = data.aws_iam_policy_document.codedeploy.json
+}
+
 resource "aws_iam_role_policy_attachment" "codedeploy" {
   count      = local.codedeploy_count
-  policy_arn = "arn:aws:iam::aws:policy/AWSCodeDeployRoleForECS"
   role       = join("", aws_iam_role.default.*.id)
+  policy_arn = join("", aws_iam_policy.codedeploy.*.arn)
+}
+
+resource "aws_iam_role_policy_attachment" "codedeploy_role" {
+  count      = local.codedeploy_count
+  policy_arn = "arn:${join("", data.aws_partition.current.*.partition)}:iam::aws:policy/AWSCodeDeployRoleForECS"
+  role       = join("", aws_iam_role.default.*.id)
+}
+
+data "aws_partition" "current" {
+  count = local.codedeploy_count
 }
 
 module "codedeploy" {
@@ -276,7 +322,6 @@ module "codedeploy" {
   context = module.this.context
 }
 ## CodeDeploy Module ###
-
 
 resource "aws_codepipeline" "default" {
   count    = module.this.enabled && var.github_oauth_token != "" ? 1 : 0
@@ -379,6 +424,7 @@ resource "aws_codepipeline" "default" {
       name = "Deploy"
 
       action {
+        name     = "Deploy"
         category = "Deploy"
         owner    = "AWS"
         provider = "CodeDeployToECS"
@@ -387,12 +433,12 @@ resource "aws_codepipeline" "default" {
         input_artifacts = ["task"]
 
         configuration = {
-          ApplicationName                = module.codedeploy.name
-          DeploymentGroupName            = module.codedeploy.deployment_config_name
+          ApplicationName                = join("", module.codedeploy.*.name)
+          DeploymentGroupName            = join("", module.codedeploy.*.deployment_config_name)
           Image1ArtifactName             = "task"
           Image1ContainerName            = "IMAGE1_NAME"
           AppSpecTemplateArtifact        = "task"
-          AppSpecTemplatePath            = "appspec.yaml"
+          AppSpecTemplatePath            = "appspec.yml"
           TaskDefinitionTemplateArtifact = "task"
           TaskDefinitionTemplatePath     = "taskdef.json"
         }
@@ -495,7 +541,9 @@ locals {
   region         = var.region != "" ? var.region : data.aws_region.default.name
   aws_account_id = var.aws_account_id != "" ? var.aws_account_id : data.aws_caller_identity.default.account_id
 
-  codedeploy_count = module.this.enabled && var.use_codedeploy_for_deployment ? 1 : 0
+  codedeploy_count       = module.this.enabled && var.use_codedeploy_for_deployment ? 1 : 0
+  codedeploy_app_name    = join("", module.codedeploy.*.name)
+  codedeploy_config_name = join("", module.codedeploy.*.deployment_config_name)
 
   webhook_secret = join("", random_string.webhook_secret.*.result)
   webhook_url    = join("", aws_codepipeline_webhook.webhook.*.url)
