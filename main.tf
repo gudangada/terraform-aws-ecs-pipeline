@@ -345,8 +345,7 @@ data "aws_partition" "current" {
 }
 
 module "codedeploy" {
-  source  = "cloudposse/code-deploy/aws"
-  version = "0.2.3"
+  source = "git::https://github.com/gudangada/terraform-aws-code-deploy"
 
   count                              = local.codedeploy_count
   minimum_healthy_hosts              = var.minimum_healthy_hosts
