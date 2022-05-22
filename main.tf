@@ -288,7 +288,6 @@ resource "aws_iam_role_policy_attachment" "codebuild_ecr" {
   policy_arn = join("", aws_iam_policy.ecr.*.arn)
 }
 
-
 ## CodeDeploy Module ###
 data "aws_iam_policy_document" "codedeploy" {
   statement {
