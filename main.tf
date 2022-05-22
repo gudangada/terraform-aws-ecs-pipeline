@@ -243,6 +243,52 @@ resource "aws_iam_role_policy_attachment" "codebuild_s3" {
   policy_arn = join("", aws_iam_policy.s3.*.arn)
 }
 
+data "aws_ecr_repository" "default" {
+  count = module.this.enabled && var.image_repo_name != "" ? 1 : 0
+  name  = var.image_repo_name
+}
+
+data "aws_iam_policy_document" "ecr" {
+  count = module.this.enabled && var.image_repo_name != "" ? 1 : 0
+
+  statement {
+    sid = ""
+
+    actions = [
+      "ecr:BatchGetImage",
+      "ecr:GetDownloadUrlForLayer"
+    ]
+
+    resources = [
+      data.aws_ecr_repository.default.arn
+    ]
+
+    effect = "Allow"
+  }
+}
+
+
+module "codepipeline_ecr_policy_label" {
+  source     = "cloudposse/label/null"
+  version    = "0.24.1"
+  attributes = ["codepipeline", "ecr"]
+
+  context = module.this.context
+}
+
+resource "aws_iam_policy" "ecr" {
+  count  = module.this.enabled && var.image_repo_name ? 1 : 0
+  name   = module.codepipeline_ecr_policy_label.id
+  policy = join("", data.aws_iam_policy_document.ecr.*.json)
+}
+
+resource "aws_iam_role_policy_attachment" "codebuild_ecr" {
+  count      = module.this.enabled && var.image_repo_name ? 1 : 0
+  role       = module.codebuild.role_id
+  policy_arn = join("", aws_iam_policy.ecr.*.arn)
+}
+
+
 ## CodeDeploy Module ###
 data "aws_iam_policy_document" "codedeploy" {
   statement {
