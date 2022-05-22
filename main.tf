@@ -260,7 +260,7 @@ data "aws_iam_policy_document" "ecr" {
     ]
 
     resources = [
-      data.aws_ecr_repository.default.arn
+      join("", data.aws_ecr_repository.default.*.arn)
     ]
 
     effect = "Allow"
@@ -277,13 +277,13 @@ module "codepipeline_ecr_policy_label" {
 }
 
 resource "aws_iam_policy" "ecr" {
-  count  = module.this.enabled && var.image_repo_name ? 1 : 0
+  count  = module.this.enabled && var.image_repo_name != "" ? 1 : 0
   name   = module.codepipeline_ecr_policy_label.id
   policy = join("", data.aws_iam_policy_document.ecr.*.json)
 }
 
 resource "aws_iam_role_policy_attachment" "codebuild_ecr" {
-  count      = module.this.enabled && var.image_repo_name ? 1 : 0
+  count      = module.this.enabled && var.image_repo_name != "" ? 1 : 0
   role       = module.codebuild.role_id
   policy_arn = join("", aws_iam_policy.ecr.*.arn)
 }
@@ -325,7 +325,7 @@ module "codedeploy_label" {
 resource "aws_iam_policy" "codedeploy" {
   count  = local.codedeploy_count
   name   = module.codedeploy_label.id
-  policy = data.aws_iam_policy_document.codedeploy.json
+  policy = join("", data.aws_iam_policy_document.codedeploy.*.json)
 }
 
 resource "aws_iam_role_policy_attachment" "codedeploy" {
