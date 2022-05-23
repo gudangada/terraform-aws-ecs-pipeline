@@ -382,7 +382,9 @@ resource "aws_codepipeline" "default" {
     aws_iam_role_policy_attachment.s3,
     aws_iam_role_policy_attachment.codebuild,
     aws_iam_role_policy_attachment.codebuild_s3,
-    aws_iam_role_policy_attachment.codedeploy
+    aws_iam_role_policy_attachment.codedeploy,
+    aws_iam_role_policy_attachment.codebuild_ecr,
+    aws_iam_role_policy_attachment.codedeploy_role
   ]
 
   stage {
@@ -478,7 +480,7 @@ resource "aws_codepipeline" "default" {
 
         configuration = {
           ApplicationName                = join("", module.codedeploy.*.name)
-          DeploymentGroupName            = join("", module.codedeploy.*.deployment_config_name)
+          DeploymentGroupName            = join("", module.codedeploy.*.group_name)
           Image1ArtifactName             = "task"
           Image1ContainerName            = "IMAGE1_NAME"
           AppSpecTemplateArtifact        = "task"
@@ -512,7 +514,8 @@ resource "aws_codepipeline" "bitbucket" {
     aws_iam_role_policy_attachment.s3,
     aws_iam_role_policy_attachment.codebuild,
     aws_iam_role_policy_attachment.codebuild_s3,
-    aws_iam_role_policy_attachment.codestar
+    aws_iam_role_policy_attachment.codestar,
+    aws_iam_role_policy_attachment.codedeploy
   ]
 
   stage {
