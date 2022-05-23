@@ -304,7 +304,7 @@ data "aws_iam_policy_document" "codedeploy" {
     ]
 
     resources = [
-      "arn:aws:codedeploy:${local.region}:${local.aws_account_id}:deploymentgroup:${local.codedeploy_app_name}/${local.codedeploy_config_name}",
+      "arn:aws:codedeploy:${local.region}:${local.aws_account_id}:deploymentgroup:${local.codedeploy_app_name}/${local.codedeploy_group_name}",
       "arn:aws:codedeploy:${local.region}:${local.aws_account_id}:application:${local.codedeploy_app_name}",
       "arn:aws:codedeploy:${local.region}:${local.aws_account_id}:deploymentconfig:${local.codedeploy_config_name}"
     ]
@@ -591,6 +591,7 @@ locals {
   codedeploy_count       = module.this.enabled && var.use_codedeploy_for_deployment ? 1 : 0
   codedeploy_app_name    = join("", module.codedeploy.*.name)
   codedeploy_config_name = join("", module.codedeploy.*.deployment_config_name)
+  codedeploy_group_name  = join("", module.codedeploy.*.group_name)
 
   webhook_secret = join("", random_string.webhook_secret.*.result)
   webhook_url    = join("", aws_codepipeline_webhook.webhook.*.url)
