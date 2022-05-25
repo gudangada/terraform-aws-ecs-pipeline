@@ -245,7 +245,7 @@ resource "aws_iam_role_policy_attachment" "codebuild_s3" {
 
 data "aws_ecr_repository" "default" {
   count = module.this.enabled && var.image_repo_name != "" ? 1 : 0
-  name  = var.image_repo_name
+  name  = element(split("/", var.image_repo_name), length(split("/", var.image_repo_name)) - 1)
 }
 
 data "aws_iam_policy_document" "ecr" {
