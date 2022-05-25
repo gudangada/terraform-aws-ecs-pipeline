@@ -150,8 +150,11 @@ data "aws_iam_policy_document" "codebuild" {
       "codebuild:*"
     ]
 
-    resources = [module.codebuild.project_id]
-    effect    = "Allow"
+    resources = [
+      module.codebuild.project_id
+    ]
+
+    effect = "Allow"
   }
 }
 
@@ -240,6 +243,130 @@ resource "aws_iam_role_policy_attachment" "codebuild_s3" {
   policy_arn = join("", aws_iam_policy.s3.*.arn)
 }
 
+data "aws_ecr_repository" "default" {
+  count = module.this.enabled && var.image_repo_name != "" ? 1 : 0
+  name  = element(split("/", var.image_repo_name), length(split("/", var.image_repo_name)) - 1)
+}
+
+data "aws_iam_policy_document" "ecr" {
+  count = module.this.enabled && var.image_repo_name != "" ? 1 : 0
+
+  statement {
+    sid = ""
+
+    actions = [
+      "ecr:BatchGetImage",
+      "ecr:GetDownloadUrlForLayer"
+    ]
+
+    resources = [
+      join("", data.aws_ecr_repository.default.*.arn)
+    ]
+
+    effect = "Allow"
+  }
+}
+
+
+module "codepipeline_ecr_policy_label" {
+  source     = "cloudposse/label/null"
+  version    = "0.24.1"
+  attributes = ["codepipeline", "ecr"]
+
+  context = module.this.context
+}
+
+resource "aws_iam_policy" "ecr" {
+  count  = module.this.enabled && var.image_repo_name != "" ? 1 : 0
+  name   = module.codepipeline_ecr_policy_label.id
+  policy = join("", data.aws_iam_policy_document.ecr.*.json)
+}
+
+resource "aws_iam_role_policy_attachment" "codebuild_ecr" {
+  count      = module.this.enabled && var.image_repo_name != "" ? 1 : 0
+  role       = module.codebuild.role_id
+  policy_arn = join("", aws_iam_policy.ecr.*.arn)
+}
+
+## CodeDeploy Module ###
+data "aws_iam_policy_document" "codedeploy" {
+  statement {
+    sid = ""
+
+    actions = [
+      "codedeploy:CreateDeployment",
+      "codedeploy:GetDeployment",
+      "codedeploy:GetApplication",
+      "codedeploy:GetApplicationRevision",
+      "codedeploy:RegisterApplicationRevision",
+      "codedeploy:GetDeploymentConfig",
+      "ecs:RegisterTaskDefinition"
+    ]
+
+    resources = [
+      "arn:aws:codedeploy:${local.region}:${local.aws_account_id}:deploymentgroup:${local.codedeploy_app_name}/${local.codedeploy_group_name}",
+      "arn:aws:codedeploy:${local.region}:${local.aws_account_id}:application:${local.codedeploy_app_name}",
+      "arn:aws:codedeploy:${local.region}:${local.aws_account_id}:deploymentconfig:${local.codedeploy_config_name}"
+    ]
+
+    effect = "Allow"
+  }
+}
+
+module "codedeploy_label" {
+  source     = "cloudposse/label/null"
+  version    = "0.24.1"
+  attributes = ["codedeploy"]
+
+  context = module.this.context
+}
+
+resource "aws_iam_policy" "codedeploy" {
+  count  = local.codedeploy_count
+  name   = module.codedeploy_label.id
+  policy = join("", data.aws_iam_policy_document.codedeploy.*.json)
+}
+
+resource "aws_iam_role_policy_attachment" "codedeploy" {
+  count      = local.codedeploy_count
+  role       = join("", aws_iam_role.default.*.id)
+  policy_arn = join("", aws_iam_policy.codedeploy.*.arn)
+}
+
+resource "aws_iam_role_policy_attachment" "codedeploy_role" {
+  count      = local.codedeploy_count
+  policy_arn = "arn:${join("", data.aws_partition.current.*.partition)}:iam::aws:policy/AWSCodeDeployRoleForECS"
+  role       = join("", aws_iam_role.default.*.id)
+}
+
+data "aws_partition" "current" {
+  count = local.codedeploy_count
+}
+
+module "codedeploy" {
+  source = "git::https://github.com/gudangada/terraform-aws-code-deploy"
+
+  count                              = local.codedeploy_count
+  minimum_healthy_hosts              = var.minimum_healthy_hosts
+  traffic_routing_config             = var.traffic_routing_config
+  alarm_configuration                = var.alarm_configuration
+  auto_rollback_configuration_events = var.auto_rollback_configuration_events
+  blue_green_deployment_config       = var.blue_green_deployment_config
+  deployment_style                   = var.deployment_style
+  load_balancer_info                 = var.load_balancer_info
+  service_role_arn                   = join("", aws_iam_role.default.*.arn)
+
+  ecs_service = [
+    {
+      cluster_name = var.ecs_cluster_name
+      service_name = var.service_name
+    }
+  ]
+
+  context = module.this.context
+}
+## CodeDeploy Module ###
+
 resource "aws_codepipeline" "default" {
   count    = module.this.enabled && var.github_oauth_token != "" ? 1 : 0
   name     = module.codepipeline_label.id
@@ -254,7 +381,10 @@ resource "aws_codepipeline" "default" {
     aws_iam_role_policy_attachment.default,
     aws_iam_role_policy_attachment.s3,
     aws_iam_role_policy_attachment.codebuild,
-    aws_iam_role_policy_attachment.codebuild_s3
+    aws_iam_role_policy_attachment.codebuild_s3,
+    aws_iam_role_policy_attachment.codedeploy,
+    aws_iam_role_policy_attachment.codebuild_ecr,
+    aws_iam_role_policy_attachment.codedeploy_role
   ]
 
   stage {
@@ -278,16 +408,18 @@ resource "aws_codepipeline" "default" {
     }
   }
 
-  # TODO: Implement this with dynamic
-  stage {
-    name = "Approval"
+  dynamic "stage" {
+    for_each = var.disable_approval_before_build ? [] : [1]
+    content {
+      name = "Approval"
 
-    action {
-      name     = "Approval"
-      category = "Approval"
-      owner    = "AWS"
-      provider = "Manual"
-      version  = "1"
+      action {
+        name     = "Approval"
+        category = "Approval"
+        owner    = "AWS"
+        provider = "Manual"
+        version  = "1"
+      }
     }
   }
 
@@ -310,20 +442,52 @@ resource "aws_codepipeline" "default" {
     }
   }
 
-  stage {
-    name = "Deploy"
+  dynamic "stage" {
+    for_each = var.use_codedeploy_for_deployment ? [] : [1]
+    content {
+      name = "Deploy"
 
-    action {
-      name            = "Deploy"
-      category        = "Deploy"
-      owner           = "AWS"
-      provider        = "ECS"
-      input_artifacts = ["task"]
-      version         = "1"
+      action {
+        name     = "Deploy"
+        category = "Deploy"
+        owner    = "AWS"
+        provider = "ECS"
+        version  = "1"
 
-      configuration = {
-        ClusterName = var.ecs_cluster_name
-        ServiceName = var.service_name
+        input_artifacts = ["task"]
+
+        configuration = {
+          ClusterName = var.ecs_cluster_name
+          ServiceName = var.service_name
+        }
+      }
+    }
+  }
+
+  dynamic "stage" {
+    for_each = var.use_codedeploy_for_deployment ? [1] : []
+    content {
+      name = "Deploy"
+
+      action {
+        name     = "Deploy"
+        category = "Deploy"
+        owner    = "AWS"
+        provider = "CodeDeployToECS"
+        version  = "1"
+
+        input_artifacts = ["task"]
+
+        configuration = {
+          ApplicationName                = join("", module.codedeploy.*.name)
+          DeploymentGroupName            = join("", module.codedeploy.*.group_name)
+          Image1ArtifactName             = "task"
+          Image1ContainerName            = "IMAGE1_NAME"
+          AppSpecTemplateArtifact        = "task"
+          AppSpecTemplatePath            = "appspec.yml"
+          TaskDefinitionTemplateArtifact = "task"
+          TaskDefinitionTemplatePath     = "taskdef.json"
+        }
       }
     }
   }
@@ -350,7 +514,8 @@ resource "aws_codepipeline" "bitbucket" {
     aws_iam_role_policy_attachment.s3,
     aws_iam_role_policy_attachment.codebuild,
     aws_iam_role_policy_attachment.codebuild_s3,
-    aws_iam_role_policy_attachment.codestar
+    aws_iam_role_policy_attachment.codestar,
+    aws_iam_role_policy_attachment.codedeploy
   ]
 
   stage {
@@ -420,6 +585,14 @@ resource "random_string" "webhook_secret" {
 }
 
 locals {
+  region         = var.region != "" ? var.region : data.aws_region.default.name
+  aws_account_id = var.aws_account_id != "" ? var.aws_account_id : data.aws_caller_identity.default.account_id
+
+  codedeploy_count       = module.this.enabled && var.use_codedeploy_for_deployment ? 1 : 0
+  codedeploy_app_name    = join("", module.codedeploy.*.name)
+  codedeploy_config_name = join("", module.codedeploy.*.deployment_config_name)
+  codedeploy_group_name  = join("", module.codedeploy.*.group_name)
+
   webhook_secret = join("", random_string.webhook_secret.*.result)
   webhook_url    = join("", aws_codepipeline_webhook.webhook.*.url)
 }

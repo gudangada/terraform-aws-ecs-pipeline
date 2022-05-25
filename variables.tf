@@ -204,3 +204,107 @@ variable "codebuild_vpc_config" {
   default     = {}
   description = "Configuration for the builds to run inside a VPC."
 }
+
+variable "disable_approval_before_build" {
+  type        = bool
+  default     = false
+  description = "Boolean to enable or disable manual approval before build"
+}
+
+### CodeDeploy ###
+variable "use_codedeploy_for_deployment" {
+  type        = bool
+  default     = false
+  description = "Boolean to enable codepipeline to use CodeDeploy as deployment provider"
+}
+
+variable "minimum_healthy_hosts" {
+  type = object({
+    type  = string
+    value = number
+  })
+  default     = null
+  description = <<-DOC
+    type:
+      The type can either be `FLEET_PERCENT` or `HOST_COUNT`.
+    value:
+      The value when the type is `FLEET_PERCENT` represents the minimum number of healthy instances 
+      as a percentage of the total number of instances in the deployment.
+      When the type is `HOST_COUNT`, the value represents the minimum number of healthy instances as an absolute value.
+  DOC
+}
+
+variable "traffic_routing_config" {
+  type = object({
+    type       = string
+    interval   = number
+    percentage = number
+  })
+  default     = null
+  description = <<-DOC
+    type:
+      Type of traffic routing config. One of `TimeBasedCanary`, `TimeBasedLinear`, `AllAtOnce`.
+    interval:
+      The number of minutes between the first and second traffic shifts of a deployment.
+    percentage:
+      The percentage of traffic to shift in the first increment of a deployment.
+  DOC
+}
+
+variable "alarm_configuration" {
+  type = object({
+    alarms                    = list(string)
+    ignore_poll_alarm_failure = bool
+  })
+  default     = null
+  description = <<-DOC
+     Configuration of deployment to stop when a CloudWatch alarm detects that a metric has fallen below or exceeded a defined threshold.
+      alarms:
+        A list of alarms configured for the deployment group.
+      ignore_poll_alarm_failure:
+        Indicates whether a deployment should continue if information about the current state of alarms cannot be retrieved from CloudWatch.
+  DOC
+}
+
+variable "auto_rollback_configuration_events" {
+  type        = string
+  default     = "DEPLOYMENT_FAILURE"
+  description = "The event type or types that trigger a rollback. Supported types are `DEPLOYMENT_FAILURE` and `DEPLOYMENT_STOP_ON_ALARM`."
+}
+
+variable "blue_green_deployment_config" {
+  type        = any
+  default     = null
+  description = <<-DOC
+    Configuration block of the blue/green deployment options for a deployment group, 
+    see https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/codedeploy_deployment_group#blue_green_deployment_config
+  DOC
+}
+
+variable "deployment_style" {
+  type = object({
+    deployment_option = string
+    deployment_type   = string
+  })
+  default     = null
+  description = <<-DOC
+    Configuration of the type of deployment, either in-place or blue/green, 
+    you want to run and whether to route deployment traffic behind a load balancer.
+    deployment_option:
+      Indicates whether to route deployment traffic behind a load balancer. 
+      Possible values: `WITH_TRAFFIC_CONTROL`, `WITHOUT_TRAFFIC_CONTROL`.
+    deployment_type:
+      Indicates whether to run an in-place deployment or a blue/green deployment.
+      Possible values: `IN_PLACE`, `BLUE_GREEN`.
+  DOC
+}
+
+variable "load_balancer_info" {
+  type        = map(any)
+  default     = null
+  description = <<-DOC
+    Single configuration block of the load balancer to use in a blue/green deployment, 
+    see https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/codedeploy_deployment_group#load_balancer_info
+  DOC
+}
+### CodeDeploy ###

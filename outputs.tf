@@ -67,3 +67,28 @@ output "codepipeline_resource" {
   description = "CodePipeline resource"
   value       = local.codepipeline_resource
 }
+
+output "id" {
+  description = "The application ID."
+  value       = try(module.codebuild.id, null)
+}
+
+output "name" {
+  description = "The application's name."
+  value       = try(module.codebuild, null)
+}
+
+output "group_id" {
+  description = "The application group ID."
+  value       = try(module.codebuild.group_id, null)
+}
+
+output "deployment_config_name" {
+  description = "The deployment group's config name."
+  value       = try(module.codebuild.deployment_config_name, null)
+}
+
+output "deployment_config_id" {
+  description = "The deployment config ID."
+  value       = try(module.codebuild.deployment_config_id, null)
+}
