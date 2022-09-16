@@ -499,7 +499,7 @@ resource "aws_codepipeline" "default" {
 }
 
 # https://docs.aws.amazon.com/codepipeline/latest/userguide/action-reference-CodestarConnectionSource.html#action-reference-CodestarConnectionSource-example
-resource "aws_codepipeline" "bitbucket" {
+resource "aws_codepipeline" "codestarconnection" {
   count    = module.this.enabled && var.codestar_connection_arn != "" ? 1 : 0
   name     = module.codepipeline_label.id
   role_arn = join("", aws_iam_role.default.*.arn)
@@ -538,6 +538,21 @@ resource "aws_codepipeline" "bitbucket" {
     }
   }
 
+  dynamic "stage" {
+    for_each = var.disable_approval_before_build ? [] : [1]
+    content {
+      name = "Approval"
+
+      action {
+        name     = "Approval"
+        category = "Approval"
+        owner    = "AWS"
+        provider = "Manual"
+        version  = "1"
+      }
+    }
+  }
+
   stage {
     name = "Build"
 
@@ -557,20 +572,52 @@ resource "aws_codepipeline" "bitbucket" {
     }
   }
 
-  stage {
-    name = "Deploy"
+  dynamic "stage" {
+    for_each = var.use_codedeploy_for_deployment ? [] : [1]
+    content {
+      name = "Deploy"
 
-    action {
-      name            = "Deploy"
-      category        = "Deploy"
-      owner           = "AWS"
-      provider        = "ECS"
-      input_artifacts = ["task"]
-      version         = "1"
+      action {
+        name     = "Deploy"
+        category = "Deploy"
+        owner    = "AWS"
+        provider = "ECS"
+        version  = "1"
 
-      configuration = {
-        ClusterName = var.ecs_cluster_name
-        ServiceName = var.service_name
+        input_artifacts = ["task"]
+
+        configuration = {
+          ClusterName = var.ecs_cluster_name
+          ServiceName = var.service_name
+        }
+      }
+    }
+  }
+
+  dynamic "stage" {
+    for_each = var.use_codedeploy_for_deployment ? [1] : []
+    content {
+      name = "Deploy"
+
+      action {
+        name     = "Deploy"
+        category = "Deploy"
+        owner    = "AWS"
+        provider = "CodeDeployToECS"
+        version  = "1"
+
+        input_artifacts = ["task"]
+
+        configuration = {
+          ApplicationName                = join("", module.codedeploy.*.name)
+          DeploymentGroupName            = join("", module.codedeploy.*.group_name)
+          Image1ArtifactName             = "task"
+          Image1ContainerName            = "IMAGE1_NAME"
+          AppSpecTemplateArtifact        = "task"
+          AppSpecTemplatePath            = "appspec.yml"
+          TaskDefinitionTemplateArtifact = "task"
+          TaskDefinitionTemplatePath     = "taskdef.json"
+        }
       }
     }
   }
